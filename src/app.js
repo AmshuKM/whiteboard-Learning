@@ -149,7 +149,7 @@ function buildPayload(messages) {
     if (prev && prev.role === m.role) {
       prev.text = [prev.text, m.text].filter(Boolean).join('\n\n');
       if (m.image) prev.image = m.image;
-    } else out.push({ role: m.role, text: m.text, image: m.image });
+    } else out.push({ role: m.role, text: m.text, image: m.image, kind: m.kind });
   }
   out.forEach((m, i) => {
     const isLast = i === out.length - 1;
@@ -160,25 +160,36 @@ function buildPayload(messages) {
     }
     if (isLast) {
       if (m.image) m.text = m.text || '(My answer is on the whiteboard. Please evaluate it.)';
-      else m.text = `${m.text}\n\n[The whiteboard is empty.]`;
+      else if (m.kind !== 'next') m.text = `${m.text}\n\n[The whiteboard is empty.]`;
     }
     if (!m.image) delete m.image;
+    delete m.kind;
   });
   return out;
 }
 
-async function send() {
+// Default: send the typed text plus a board snapshot.
+// "Next question": clear the board (undoable) and ask the AI to move on;
+// any half-typed draft stays in the input.
+async function send({ next = false } = {}) {
   if (busy) return;
-  const text = $('input').value.trim();
-  const image = board.exportPNG();
-  if (!text && !image) return;
+  let text, image, userMsg;
+  if (next) {
+    board.clear();
+    text = 'Next question, please.';
+    userMsg = { role: 'user', text, kind: 'next' };
+  } else {
+    text = $('input').value.trim();
+    image = board.exportPNG();
+    if (!text && !image) return;
+    userMsg = { role: 'user', text, ...(image ? { image } : {}) };
+    $('input').value = '';
+    autoGrow();
+  }
 
   if (!session.messages.length) session.title = makeTitle(text || 'Whiteboard session');
-  const userMsg = { role: 'user', text, ...(image ? { image } : {}) };
   session.messages.push(userMsg);
   addMessageEl(userMsg);
-  $('input').value = '';
-  autoGrow();
   $('sessionTitle').textContent = session.title;
   await save();
   refreshSessionList();
@@ -237,6 +248,7 @@ function cleanError(err) {
 }
 
 function setSending(on) {
+  $('nextQuestion').disabled = on;
   const b = $('send');
   b.textContent = on ? 'Stop' : 'Send';
   b.classList.toggle('primary', !on);
@@ -247,6 +259,7 @@ $('send').addEventListener('click', () => {
   if (busy) window.api.cancelChat(busy.requestId);
   else send();
 });
+$('nextQuestion').addEventListener('click', () => send({ next: true }));
 $('input').addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
     e.preventDefault();

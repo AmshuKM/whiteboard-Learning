@@ -24,6 +24,9 @@ How to behave:
 - Keep replies short enough to read in a small chat window. Use Markdown, and use short lists where they help.`;
 
 // ---------- storage ----------
+// Tests point this at a temp folder so they never touch real sessions/settings.
+if (process.env.WHITEBOARD_TUTOR_DATA_DIR) app.setPath('userData', process.env.WHITEBOARD_TUTOR_DATA_DIR);
+
 const userDir = () => app.getPath('userData');
 const settingsPath = () => path.join(userDir(), 'settings.json');
 const sessionsDir = () => {

@@ -53,7 +53,9 @@ Text-only models (for example `llama3`) will chat but can't see the whiteboard.
 | Text label | T | Click to place. Enter to finish, Shift+Enter for a new line. |
 | Undo / Redo | Ctrl+Z / Ctrl+Y | |
 
-The app crops the snapshot to what you drew, so empty space doesn't matter. If the board is empty, only your text is sent. Clear the board (trash icon) before you start the next question's answer.
+The app crops the snapshot to what you drew, so empty space doesn't matter. If the board is empty, only your text is sent.
+
+When you're done with a question, click **Next question** (above the chat box). It clears the board and asks the AI to move on. Anything you've half-typed stays in the box, and Ctrl+Z brings the cleared drawing back.
 
 ## Sessions
 
@@ -63,6 +65,17 @@ Data location:
 - Windows: `%APPDATA%\whiteboard-tutor`
 - macOS: `~/Library/Application Support/whiteboard-tutor`
 - Linux: `~/.config/whiteboard-tutor`
+
+## Running the tests
+
+The end-to-end tests launch the real app and drive it against mock Ollama and Claude servers, so you don't need a model or an API key to run them:
+
+```bash
+npm test                 # Windows / macOS
+xvfb-run -a npm test     # Linux without a display
+```
+
+They use a temporary data folder, so your real sessions and settings are never touched.
 
 ## Building an installer
 
@@ -81,6 +94,7 @@ src/index.html     Layout
 src/styles.css     Styling
 src/whiteboard.js  Vector whiteboard (tools, undo, PNG export)
 src/app.js         Chat, sessions, settings UI
+test/e2e.test.js   End-to-end tests (Playwright + mock AI servers)
 ```
 
 To change how the AI behaves, edit `SYSTEM_PROMPT` at the top of `main.js`. For example, you can make it stricter, or ask it to give hints before full answers.
