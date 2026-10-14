@@ -1,0 +1,25 @@
+{
+  "name": "whiteboard-tutor",
+  "version": "0.1.0",
+  "description": "Whiteboard + AI chat for learning. Works with Ollama (local) or Claude.",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.133.0",
+    "dompurify": "^3.1.0",
+    "marked": "^14.0.0"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "build": {
+    "appId": "com.whiteboardtutor.app",
+    "productName": "Whiteboard Tutor",
+    "files": ["main.js", "preload.js", "src/**/*", "node_modules/**/*"]
+  }
+}

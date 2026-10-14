@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'" />
+  <title>Whiteboard Tutor</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- Sessions sidebar -->
+    <aside id="sidebar">
+      <div class="side-head">
+        <span class="brand">Whiteboard Tutor</span>
+      </div>
+      <button id="newSession" class="btn primary block">+ New session</button>
+      <div class="side-label">Sessions</div>
+      <ul id="sessionList"></ul>
+      <button id="openSettings" class="btn ghost block">⚙ Settings</button>
+    </aside>
+
+    <!-- Whiteboard -->
+    <main id="boardArea">
+      <div id="toolbar">
+        <div class="group" id="tools">
+          <button data-tool="select" title="Select / move (V)"><svg viewBox="0 0 24 24"><path d="M5 3l14 8-6 2-3 6z"/></svg></button>
+          <button data-tool="pen" title="Pen (P)" class="active"><svg viewBox="0 0 24 24"><path d="M3 21l3-1 12-12-2-2L4 18zM15 5l2-2 4 4-2 2z"/></svg></button>
+          <button data-tool="eraser" title="Eraser: removes whole strokes (E)"><svg viewBox="0 0 24 24"><path d="M16 3l5 5-11 11H5l-3-3zM9 19h12"/></svg></button>
+          <span class="sep"></span>
+          <button data-tool="line" title="Line (L), hold Shift to snap"><svg viewBox="0 0 24 24"><path d="M4 20L20 4"/></svg></button>
+          <button data-tool="arrow" title="Arrow (A)"><svg viewBox="0 0 24 24"><path d="M4 20L20 4M11 4h9v9"/></svg></button>
+          <button data-tool="rect" title="Rectangle (R)"><svg viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="12"/></svg></button>
+          <button data-tool="ellipse" title="Ellipse (O)"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="12" rx="9" ry="6"/></svg></button>
+          <button data-tool="text" title="Text label (T)"><svg viewBox="0 0 24 24"><path d="M5 5h14M12 5v14"/></svg></button>
+        </div>
+        <div class="group" id="colors"></div>
+        <div class="group" id="sizes"></div>
+        <div class="group">
+          <button id="undo" title="Undo (Ctrl+Z)"><svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5M4 9h11a5 5 0 010 10h-3"/></svg></button>
+          <button id="redo" title="Redo (Ctrl+Y)"><svg viewBox="0 0 24 24"><path d="M15 14l5-5-5-5M20 9H9a5 5 0 000 10h3"/></svg></button>
+          <button id="clear" title="Clear board"><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg></button>
+        </div>
+      </div>
+      <div id="board"></div>
+    </main>
+
+    <!-- Chat -->
+    <section id="chat">
+      <div class="chat-head">
+        <span id="sessionTitle">New session</span>
+        <span id="providerBadge" class="badge"></span>
+      </div>
+      <div id="messages">
+        <div class="empty-hint" id="emptyHint">
+          <p><strong>Tell the AI what to do.</strong> For example:</p>
+          <p class="example">"Act as an interviewer and ask me questions about VLSI design. If I make a mistake, correct me."</p>
+          <p>Whatever is on the whiteboard is sent with each message, so draw your answer and then press send.</p>
+        </div>
+      </div>
+      <div id="composer">
+        <div id="attachNote"></div>
+        <div class="composer-row">
+          <textarea id="input" rows="2" placeholder="Type an answer or a note… (Enter to send, Shift+Enter for a new line)"></textarea>
+          <button id="send" class="btn primary">Send</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Settings dialog -->
+  <dialog id="settings">
+    <form method="dialog" id="settingsForm">
+      <h2>Settings</h2>
+      <fieldset>
+        <legend>AI provider</legend>
+        <label class="radio"><input type="radio" name="provider" value="ollama" /> Ollama (local)</label>
+        <label class="radio"><input type="radio" name="provider" value="claude" /> Claude (Anthropic API)</label>
+      </fieldset>
+
+      <div id="ollamaFields" class="fields">
+        <label>Ollama URL <input id="ollamaUrl" type="text" /></label>
+        <label>Model
+          <span class="row">
+            <select id="ollamaModel"></select>
+            <button type="button" id="refreshModels" class="btn ghost">Refresh</button>
+          </span>
+        </label>
+        <p class="hint" id="ollamaStatus"></p>
+        <p class="hint">Use a model that can read images, such as <code>qwen2.5vl</code>, <code>gemma3</code>, <code>llama3.2-vision</code>, or <code>llava</code>. Install one with <code>ollama pull qwen2.5vl</code>.</p>
+      </div>
+
+      <div id="claudeFields" class="fields">
+        <label>API key <input id="claudeKey" type="password" placeholder="sk-ant-…" autocomplete="off" /></label>
+        <p class="hint" id="keyStatus"></p>
+        <label>Model
+          <select id="claudeModel">
+            <option value="claude-opus-5-5">Claude Opus 5.5 (best)</option>
+            <option value="claude-sonnet-5-5">Claude Sonnet 5.5 (faster, cheaper)</option>
+            <option value="claude-haiku-5-5">Claude Haiku 5.5 (fastest, cheapest)</option>
+          </select>
+        </label>
+        <label>Thinking effort
+          <select id="claudeEffort">
+            <option value="low">Low (fast)</option>
+            <option value="medium">Medium</option>
+            <option value="high">High (more careful)</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="dialog-actions">
+        <button value="cancel" class="btn ghost">Cancel</button>
+        <button id="saveSettings" value="save" class="btn primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Image viewer -->
+  <dialog id="viewer"><img id="viewerImg" alt="Whiteboard snapshot" /></dialog>
+
+  <script src="../node_modules/marked/lib/marked.umd.js"></script>
+  <script src="../node_modules/dompurify/dist/purify.min.js"></script>
+  <script src="whiteboard.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,86 @@
+# Whiteboard Tutor
+
+A desktop app with a whiteboard and an AI chat side by side. Each time you send a message, the app attaches a snapshot of the whiteboard, so the AI can check what you drew: diagrams, circuits, cross-sections, derivations.
+
+It works with **Ollama** (local, free, private) or **Claude** (Anthropic API).
+
+## Example
+
+> **You:** Act as an interviewer and ask me questions about VLSI design. If I make a mistake, correct me.
+>
+> **AI:** Great! Let's start simple. Draw the cross-section of an NMOS transistor on the whiteboard and label all the regions.
+>
+> *(you draw it, optionally type "here's my answer", and press Send)*
+>
+> **AI:** Here's what I see… you're missing the gate oxide between the poly gate and the substrate. The correct stack is… Next question: …
+
+## Setup
+
+You need **Node.js 18+**.
+
+```bash
+npm install
+npm start
+```
+
+The Settings dialog opens on first launch.
+
+### Option A: Ollama (local)
+1. Install Ollama from https://ollama.com.
+2. Pull a model that **can read images**:
+   ```bash
+   ollama pull qwen2.5vl      # good at diagrams and text in images
+   # or: gemma3, llama3.2-vision, llava
+   ```
+3. In Settings, choose **Ollama**, press **Refresh**, and pick the model.
+
+Text-only models (for example `llama3`) will chat but can't see the whiteboard.
+
+### Option B: Claude
+1. Get an API key at https://console.anthropic.com.
+2. In Settings, choose **Claude** and paste the key. It is stored encrypted using your OS keychain. Alternatively, set `ANTHROPIC_API_KEY` in your environment.
+3. Pick a model. **Opus 5.5** gives the best diagram checking; **Sonnet 5.5** and **Haiku 5.5** are faster and cheaper.
+
+## Using the whiteboard
+
+| Tool | Key | Notes |
+|---|---|---|
+| Select / move | V | Drag to move. Delete removes the selection. Double-click a label to edit it. |
+| Pen | P | |
+| Eraser | E | Removes whole strokes or shapes |
+| Line / Arrow | L / A | Hold Shift to snap to 45° |
+| Rectangle / Ellipse | R / O | Hold Shift for a square or circle |
+| Text label | T | Click to place. Enter to finish, Shift+Enter for a new line. |
+| Undo / Redo | Ctrl+Z / Ctrl+Y | |
+
+The app crops the snapshot to what you drew, so empty space doesn't matter. If the board is empty, only your text is sent. Clear the board (trash icon) before you start the next question's answer.
+
+## Sessions
+
+Every chat and its whiteboard are saved automatically. Pick an earlier session from the left sidebar to review it or carry on. Click a snapshot in the chat to see exactly what the AI was shown.
+
+Data location:
+- Windows: `%APPDATA%\whiteboard-tutor`
+- macOS: `~/Library/Application Support/whiteboard-tutor`
+- Linux: `~/.config/whiteboard-tutor`
+
+## Building an installer
+
+```bash
+npm run dist
+```
+
+This produces an installer for your current OS in `dist/` (via electron-builder).
+
+## Project layout
+
+```
+main.js            Electron main process: AI calls (Claude SDK / Ollama), settings, session files
+preload.js         Safe bridge between the UI and main process
+src/index.html     Layout
+src/styles.css     Styling
+src/whiteboard.js  Vector whiteboard (tools, undo, PNG export)
+src/app.js         Chat, sessions, settings UI
+```
+
+To change how the AI behaves, edit `SYSTEM_PROMPT` at the top of `main.js`. For example, you can make it stricter, or ask it to give hints before full answers.
