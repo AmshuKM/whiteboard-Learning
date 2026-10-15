@@ -326,3 +326,90 @@ test('Claude request carries the board image, model, adaptive thinking, effort a
     await app.close();
   }
 });
+
+// ---------- Claude Pro / Max via Claude Code ----------
+// Makes a "claude" command that runs the fake CLI (a .cmd shim on Windows, like npm creates).
+function fakeClaudeCommand(dir) {
+  const script = path.join(__dirname, 'fixtures', 'fake-claude.js');
+  if (process.platform === 'win32') {
+    const f = path.join(dir, 'claude.cmd');
+    fs.writeFileSync(f, `@node "${script}" %*\r\n`);
+    return f;
+  }
+  const f = path.join(dir, 'claude');
+  fs.writeFileSync(f, `#!/bin/sh\nexec node "${script}" "$@"\n`, { mode: 0o755 });
+  return f;
+}
+const readLog = (f) => fs.readFileSync(f, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+
+test('Claude Pro via Claude Code: streams the reply, sends the board and history, tools off, no API key', async () => {
+  const dir = tmpDir();
+  const log = path.join(dir, 'calls.log');
+  writeSettings(dir, { provider: 'claudecode', claudeCodePath: fakeClaudeCommand(dir), claudeCodeModel: 'opus' });
+  // a key in the environment must NOT reach Claude Code, or it would bill the API instead of the plan
+  const { app, win, errors } = await launch(dir, { ANTHROPIC_API_KEY: 'sk-must-not-leak', FAKE_CLAUDE_LOG: log });
+  try {
+    assert.equal(await win.locator('#settings[open]').count(), 0, 'no settings prompt for this provider');
+    assert.equal(await win.textContent('#providerBadge'), 'Claude Pro · Opus');
+    await drag(win, [100, 100], [300, 200]);
+    await win.fill('#input', 'Interview me on VLSI. My first drawing.');
+    await win.press('#input', 'Enter');
+    await assistantDone(win, 1);
+    assert.match(await win.locator('.msg.assistant').last().innerHTML(), /Good diagram! <strong>Next:<\/strong> explain Vth\./);
+
+    let call = readLog(log).at(-1);
+    assert.equal(call.hasApiKey, false);
+    const a = call.args;
+    assert.ok(a.includes('-p'));
+    assert.equal(a[a.indexOf('--tools') + 1], '', 'all tools disabled');
+    assert.equal(a[a.indexOf('--model') + 1], 'opus');
+    assert.equal(a[a.indexOf('--input-format') + 1], 'stream-json');
+    assert.ok(fs.readFileSync(a[a.indexOf('--system-prompt-file') + 1], 'utf8').includes('whiteboard'));
+    const c = call.msg.message.content;
+    assert.equal(c[0].type, 'image');
+    assert.equal(c[0].source.media_type, 'image/png');
+    assert.equal(c[1].text, 'Interview me on VLSI. My first drawing.');
+
+    // second turn: earlier turns arrive as a transcript; Next question sends no image
+    await win.click('#nextQuestion');
+    await assistantDone(win, 2);
+    call = readLog(log).at(-1);
+    const c2 = call.msg.message.content;
+    assert.equal(c2.length, 2);
+    assert.match(c2[0].text, /Student: Interview me on VLSI[\s\S]*You \(tutor\): Good diagram!/);
+    assert.equal(c2[1].text, "Student's new message:\nNext question, please.");
+    assert.deepEqual(errors, []);
+  } finally {
+    await app.close();
+  }
+});
+
+test('Claude Code login and install problems show how to fix them', async () => {
+  const dir = tmpDir();
+  writeSettings(dir, { provider: 'claudecode', claudeCodePath: fakeClaudeCommand(dir) });
+  const { app, win, errors } = await launch(dir, { FAKE_CLAUDE_LOG: path.join(dir, 'calls.log') });
+  try {
+    await win.fill('#input', 'LOGIN_FAIL');
+    await win.press('#input', 'Enter');
+    await win.waitForSelector('.msg.error');
+    const err = await win.textContent('.msg.error');
+    assert.match(err, /Not logged in/);
+    assert.match(err, /run "claude", and log in with your Claude Pro account/);
+
+    // Settings "Check" finds the CLI, and reports a missing one clearly
+    await win.click('#openSettings');
+    await win.check('input[value="claudecode"]');
+    await win.click('#checkClaudeCode');
+    await win.waitForFunction(() => document.querySelector('#claudeCodeStatus').textContent.includes('9.9.9'));
+    await win.fill('#claudeCodePath', path.join(dir, 'no-such-claude'));
+    await win.click('#saveSettings');
+
+    await win.fill('#input', 'hello');
+    await win.press('#input', 'Enter');
+    await win.waitForFunction(() => document.querySelectorAll('.msg.error').length === 2);
+    assert.match(await win.locator('.msg.error').last().textContent(), /Couldn't find Claude Code/);
+    assert.deepEqual(errors, []);
+  } finally {
+    await app.close();
+  }
+});

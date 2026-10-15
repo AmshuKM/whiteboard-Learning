@@ -365,16 +365,35 @@ window.addEventListener('beforeunload', () => {
 
 // ---------- settings ----------
 function updateBadge() {
+  const label = (sel, v) => $(sel).querySelector(`option[value="${v}"]`)?.textContent.split(' (')[0] || v;
   $('providerBadge').textContent =
     settings.provider === 'claude'
-      ? $('claudeModel').querySelector(`option[value="${settings.claudeModel}"]`)?.textContent.split(' (')[0] || settings.claudeModel
-      : `Ollama · ${settings.ollamaModel || 'no model'}`;
+      ? label('claudeModel', settings.claudeModel)
+      : settings.provider === 'claudecode'
+        ? `Claude Pro · ${label('claudeCodeModel', settings.claudeCodeModel)}`
+        : `Ollama · ${settings.ollamaModel || 'no model'}`;
 }
 
 function showProviderFields() {
   const p = document.querySelector('input[name="provider"]:checked')?.value;
   $('ollamaFields').style.display = p === 'ollama' ? '' : 'none';
   $('claudeFields').style.display = p === 'claude' ? '' : 'none';
+  $('claudeCodeFields').style.display = p === 'claudecode' ? '' : 'none';
+  if (p === 'claudecode' && !$('claudeCodeStatus').textContent) checkClaudeCode();
+}
+
+async function checkClaudeCode() {
+  const status = $('claudeCodeStatus');
+  status.className = 'hint';
+  status.textContent = 'Looking for Claude Code…';
+  try {
+    const version = await window.api.checkClaudeCode($('claudeCodePath').value.trim() || 'claude');
+    status.className = 'hint ok';
+    status.textContent = `Found ${version}. If replies fail with a login error, run "claude" in a terminal and log in.`;
+  } catch (err) {
+    status.className = 'hint bad';
+    status.textContent = cleanError(err);
+  }
 }
 
 async function loadOllamaModels() {
@@ -404,6 +423,9 @@ async function openSettings() {
   $('claudeModel').value = settings.claudeModel;
   $('claudeEffort').value = settings.claudeEffort;
   $('claudeKey').value = '';
+  $('claudeCodeModel').value = settings.claudeCodeModel;
+  $('claudeCodePath').value = settings.claudeCodePath;
+  $('claudeCodeStatus').textContent = '';
   $('keyStatus').className = 'hint' + (settings.hasClaudeKey ? ' ok' : '');
   $('keyStatus').textContent = settings.hasClaudeKey
     ? settings.keyFromEnv
@@ -417,6 +439,7 @@ async function openSettings() {
 
 document.querySelectorAll('input[name="provider"]').forEach((r) => r.addEventListener('change', showProviderFields));
 $('refreshModels').addEventListener('click', loadOllamaModels);
+$('checkClaudeCode').addEventListener('click', checkClaudeCode);
 $('openSettings').addEventListener('click', openSettings);
 $('settings').addEventListener('close', async () => {
   if ($('settings').returnValue !== 'save') return;
@@ -426,6 +449,8 @@ $('settings').addEventListener('close', async () => {
     ollamaModel: $('ollamaModel').value || settings.ollamaModel,
     claudeModel: $('claudeModel').value,
     claudeEffort: $('claudeEffort').value,
+    claudeCodeModel: $('claudeCodeModel').value,
+    claudeCodePath: $('claudeCodePath').value.trim() || 'claude',
   };
   const key = $('claudeKey').value.trim();
   if (key) patch.claudeKey = key;
@@ -444,6 +469,7 @@ $('settings').addEventListener('close', async () => {
   const list = await window.api.listSessions();
   if (list.length) await openSession(list[0].id);
   else await newSession();
-  const firstRun = settings.provider === 'ollama' ? !settings.ollamaModel : !settings.hasClaudeKey;
+  const firstRun =
+    settings.provider === 'ollama' ? !settings.ollamaModel : settings.provider === 'claude' ? !settings.hasClaudeKey : false;
   if (firstRun) openSettings();
 })();

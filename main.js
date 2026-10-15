@@ -5,6 +5,8 @@ const { app, BrowserWindow, ipcMain, safeStorage, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
+const os = require('os');
+const { spawn, execFile } = require('child_process');
 const Anthropic = require('@anthropic-ai/sdk').default;
 
 const SYSTEM_PROMPT = `You are a learning companion built into a whiteboard app. The screen has a whiteboard and a chat panel.
@@ -42,6 +44,8 @@ const DEFAULT_SETTINGS = {
   claudeModel: 'claude-opus-5-5',
   claudeEffort: 'medium',
   claudeKeyEnc: null, // API key encrypted with the OS keychain via safeStorage
+  claudeCodePath: 'claude', // Claude Code CLI, logged in with a Pro/Max subscription
+  claudeCodeModel: '', // '' = the plan's default model
 };
 
 function readSettings() {
@@ -80,7 +84,7 @@ ipcMain.handle('settings:get', () => {
 
 ipcMain.handle('settings:set', (_e, patch) => {
   const s = readSettings();
-  const allowed = ['provider', 'ollamaUrl', 'ollamaModel', 'claudeModel', 'claudeEffort'];
+  const allowed = ['provider', 'ollamaUrl', 'ollamaModel', 'claudeModel', 'claudeEffort', 'claudeCodePath', 'claudeCodeModel'];
   for (const k of allowed) if (k in patch) s[k] = patch[k];
   if (typeof patch.claudeKey === 'string') {
     const key = patch.claudeKey.trim();
@@ -90,6 +94,16 @@ ipcMain.handle('settings:set', (_e, patch) => {
   }
   writeSettings(s);
   return true;
+});
+
+ipcMain.handle('claudecode:check', async (_e, cmdPath) => {
+  const { file, shell } = resolveClaudeCode(cmdPath || readSettings().claudeCodePath);
+  return new Promise((resolve, reject) => {
+    execFile(file, ['--version'], { shell, windowsHide: true, timeout: 20000 }, (err, stdout) => {
+      if (err) reject(new Error(err.code === 'ENOENT' ? notFoundMessage(file) : err.message));
+      else resolve(stdout.trim());
+    });
+  });
 });
 
 ipcMain.handle('ollama:models', async (_e, url) => {
@@ -151,6 +165,7 @@ ipcMain.handle('chat:send', async (event, { requestId, messages }) => {
   const emit = (text) => event.sender.send('chat:chunk', { requestId, text });
   try {
     if (s.provider === 'claude') return await chatClaude(s, messages, emit, ac.signal);
+    if (s.provider === 'claudecode') return await chatClaudeCode(s, messages, emit, ac.signal);
     return await chatOllama(s, messages, emit, ac.signal);
   } finally {
     controllers.delete(requestId);
@@ -211,6 +226,123 @@ async function chatClaude(s, messages, emit, signal) {
     throw err;
   }
   return full;
+}
+
+// ---------- Claude Pro/Max via the Claude Code CLI ----------
+// Claude Code is Anthropic's command-line tool and can be logged in with a
+// Pro or Max subscription. We run it in print mode with every tool disabled,
+// so it behaves like a plain chat model, and stream its JSON output.
+
+function notFoundMessage(file) {
+  return `Couldn't find Claude Code ("${file}"). Install it from https://claude.com/claude-code, run "claude" once in a terminal to log in with your Claude Pro account, then try again. If it's installed somewhere unusual, set its full path in Settings.`;
+}
+
+// On Windows an npm install gives claude.cmd, which can only be started via a shell.
+function resolveClaudeCode(cmd) {
+  cmd = (cmd || 'claude').trim();
+  if (process.platform !== 'win32' || /[\\/]/.test(cmd)) {
+    return { file: cmd, shell: process.platform === 'win32' && /\.(cmd|bat)$/i.test(cmd) };
+  }
+  for (const dir of (process.env.PATH || '').split(path.delimiter)) {
+    for (const ext of ['.exe', '.cmd']) {
+      const f = path.join(dir, cmd + ext);
+      if (fs.existsSync(f)) return { file: f, shell: ext === '.cmd' };
+    }
+  }
+  return { file: cmd, shell: false };
+}
+
+// Each request is independent, so earlier turns go in as a text transcript;
+// only the newest whiteboard snapshot is attached as an image.
+function claudeCodeInput(messages) {
+  const last = messages.at(-1);
+  const content = [];
+  const history = messages.slice(0, -1);
+  if (history.length) {
+    const lines = history.map((m) => `${m.role === 'assistant' ? 'You (tutor)' : 'Student'}: ${m.text}`);
+    content.push({ type: 'text', text: `Conversation so far:\n\n${lines.join('\n\n')}` });
+  }
+  if (last.image) content.push({ type: 'image', source: { type: 'base64', media_type: 'image/png', data: last.image } });
+  content.push({ type: 'text', text: history.length ? `Student's new message:\n${last.text}` : last.text });
+  return JSON.stringify({ type: 'user', message: { role: 'user', content } }) + '\n';
+}
+
+function chatClaudeCode(s, messages, emit, signal) {
+  const promptFile = path.join(userDir(), 'system-prompt.txt');
+  fs.writeFileSync(promptFile, SYSTEM_PROMPT);
+  const args = [
+    '-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose',
+    '--include-partial-messages', '--tools', '', '--strict-mcp-config', '--no-session-persistence',
+    '--system-prompt-file', promptFile,
+  ];
+  if (s.claudeCodeModel) args.push('--model', s.claudeCodeModel);
+
+  const { file, shell } = resolveClaudeCode(s.claudeCodePath);
+  // An API key in the environment would make Claude Code bill the API instead of the subscription.
+  const env = { ...process.env };
+  delete env.ANTHROPIC_API_KEY;
+  delete env.ANTHROPIC_AUTH_TOKEN;
+
+  return new Promise((resolve, reject) => {
+    const child = spawn(file, shell ? args.map((a) => `"${a}"`) : args, {
+      cwd: os.tmpdir(), env, shell, windowsHide: true,
+    });
+    let buf = '', stderr = '', full = '', fallback = '', result = null, settled = false;
+    const finish = (err, value) => {
+      if (settled) return;
+      settled = true;
+      signal.removeEventListener('abort', onAbort);
+      err ? reject(err) : resolve(value);
+    };
+    const onAbort = () => {
+      child.kill();
+      finish(new Error('Request aborted'));
+    };
+    signal.addEventListener('abort', onAbort);
+
+    child.on('error', (err) => finish(new Error(err.code === 'ENOENT' ? notFoundMessage(file) : err.message)));
+    child.stderr.on('data', (d) => (stderr += d));
+    child.stdout.on('data', (d) => {
+      buf += d;
+      let nl;
+      while ((nl = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, nl).trim();
+        buf = buf.slice(nl + 1);
+        if (!line) continue;
+        let ev;
+        try {
+          ev = JSON.parse(line);
+        } catch {
+          continue;
+        }
+        if (ev.type === 'stream_event' && ev.event?.type === 'content_block_delta' && ev.event.delta?.type === 'text_delta') {
+          full += ev.event.delta.text;
+          emit(ev.event.delta.text);
+        } else if (ev.type === 'assistant') {
+          fallback += (ev.message?.content || []).filter((c) => c.type === 'text').map((c) => c.text).join('');
+        } else if (ev.type === 'result') {
+          result = ev;
+        }
+      }
+    });
+    child.on('close', (code) => {
+      if (result && !result.is_error && result.subtype === 'success') {
+        if (!full) {
+          full = result.result || fallback;
+          if (full) emit(full);
+        }
+        return finish(null, full);
+      }
+      const detail = (result?.result || fallback || stderr || `Claude Code exited with code ${code}`).trim();
+      const hint = /log ?in|auth|credential|api key|unauthori[sz]ed/i.test(detail)
+        ? '\n\nOpen a terminal, run "claude", and log in with your Claude Pro account (type /login).'
+        : '';
+      finish(new Error(`Claude Code: ${detail.slice(0, 500)}${hint}`));
+    });
+
+    child.stdin.on('error', () => {}); // the process may exit before reading input
+    child.stdin.end(claudeCodeInput(messages));
+  });
 }
 
 async function chatOllama(s, messages, emit, signal) {

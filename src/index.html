@@ -78,7 +78,8 @@
       <fieldset>
         <legend>AI provider</legend>
         <label class="radio"><input type="radio" name="provider" value="ollama" /> Ollama (local)</label>
-        <label class="radio"><input type="radio" name="provider" value="claude" /> Claude (Anthropic API)</label>
+        <label class="radio"><input type="radio" name="provider" value="claudecode" /> Claude Pro / Max subscription (via Claude Code)</label>
+        <label class="radio"><input type="radio" name="provider" value="claude" /> Claude API key (pay per use)</label>
       </fieldset>
 
       <div id="ollamaFields" class="fields">
@@ -91,6 +92,25 @@
         </label>
         <p class="hint" id="ollamaStatus"></p>
         <p class="hint">Use a model that can read images, such as <code>qwen2.5vl</code>, <code>gemma3</code>, <code>llama3.2-vision</code>, or <code>llava</code>. Install one with <code>ollama pull qwen2.5vl</code>.</p>
+      </div>
+
+      <div id="claudeCodeFields" class="fields">
+        <p class="hint">Uses your Claude subscription through Claude Code, Anthropic's command-line tool. Install it from <code>claude.com/claude-code</code>, run <code>claude</code> in a terminal once, and log in with your Pro account. Messages count toward your plan's usage limits.</p>
+        <label>Model
+          <select id="claudeCodeModel">
+            <option value="">Plan default</option>
+            <option value="opus">Opus (best at reading diagrams)</option>
+            <option value="sonnet">Sonnet (faster, uses less of your limit)</option>
+            <option value="haiku">Haiku (fastest)</option>
+          </select>
+        </label>
+        <label>Claude Code command
+          <span class="row">
+            <input id="claudeCodePath" type="text" placeholder="claude" />
+            <button type="button" id="checkClaudeCode" class="btn ghost">Check</button>
+          </span>
+        </label>
+        <p class="hint" id="claudeCodeStatus"></p>
       </div>
 
       <div id="claudeFields" class="fields">

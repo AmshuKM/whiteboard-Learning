@@ -2,7 +2,7 @@
 
 A desktop app with a whiteboard and an AI chat side by side. Each time you send a message, the app attaches a snapshot of the whiteboard, so the AI can check what you drew: diagrams, circuits, cross-sections, derivations.
 
-It works with **Ollama** (local, free, private) or **Claude** (Anthropic API).
+It works with **Ollama** (local, free, private), your **Claude Pro / Max subscription** (through Claude Code), or a **Claude API key**.
 
 ## Example
 
@@ -36,7 +36,17 @@ The Settings dialog opens on first launch.
 
 Text-only models (for example `llama3`) will chat but can't see the whiteboard.
 
-### Option B: Claude
+### Option B: Claude Pro / Max subscription
+The app talks to Claude through **Claude Code**, Anthropic's command-line tool, which you can log in to with your subscription. No API key is needed.
+
+1. Install Claude Code by following https://claude.com/claude-code.
+2. Open a terminal, run `claude`, and log in with your Claude Pro account (type `/login` if it doesn't ask). Then exit Claude Code.
+3. In the app's Settings, choose **Claude Pro / Max subscription** and click **Check**. It should say "Found … (Claude Code)".
+4. Pick a model. **Plan default** is fine; **Opus** reads diagrams best but uses up your limit faster.
+
+Messages count toward the same usage limits as claude.ai. Claude Code runs with all its tools turned off, so it can only chat. It can't read your files or run commands. If `ANTHROPIC_API_KEY` is set on your computer, the app hides it from Claude Code so you're never billed through the API by accident.
+
+### Option C: Claude API key
 1. Get an API key at https://console.anthropic.com.
 2. In Settings, choose **Claude** and paste the key. It is stored encrypted using your OS keychain. Alternatively, set `ANTHROPIC_API_KEY` in your environment.
 3. Pick a model. **Opus 5.5** gives the best diagram checking; **Sonnet 5.5** and **Haiku 5.5** are faster and cheaper.

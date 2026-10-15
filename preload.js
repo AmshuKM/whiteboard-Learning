@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld('api', {
   getSettings: () => ipcRenderer.invoke('settings:get'),
   setSettings: (patch) => ipcRenderer.invoke('settings:set', patch),
   ollamaModels: (url) => ipcRenderer.invoke('ollama:models', url),
+  checkClaudeCode: (cmdPath) => ipcRenderer.invoke('claudecode:check', cmdPath),
 
   listSessions: () => ipcRenderer.invoke('sessions:list'),
   loadSession: (id) => ipcRenderer.invoke('sessions:load', id),
