@@ -6,6 +6,10 @@ It works with **Ollama** (local, free, private), your **Claude Pro / Max subscri
 
 ## Example
 
+![Whiteboard Tutor: the AI reviews a hand-drawn NMOS cross-section and points out the missing gate oxide](docs/example.png)
+
+*You draw an NMOS cross-section without the gate oxide, and the tutor spots the mistake and moves on to the next question.*
+
 > **You:** Act as an interviewer and ask me questions about VLSI design. If I make a mistake, correct me.
 >
 > **AI:** Great! Let's start simple. Draw the cross-section of an NMOS transistor on the whiteboard and label all the regions.
